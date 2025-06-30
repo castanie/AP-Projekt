@@ -92,7 +92,7 @@ fun CameraScreen(navController: NavController) {
                 Log.d("CameraView.CameraScreen", "Hit test succeeded.")
                 // TODO: Every anchor should be stored in the 'viewModel' so it can be properly
                 // TODO: disposed of when it is not needed anymore:
-                anchor = hitResults.get(0).createAnchor()
+                // anchor = hitResults.get(0).createAnchor()
             })
         }, update = { view ->
         val glView = view as GLSurfaceView
