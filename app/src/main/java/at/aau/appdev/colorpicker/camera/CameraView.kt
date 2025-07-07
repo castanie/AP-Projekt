@@ -3,22 +3,30 @@ package at.aau.appdev.colorpicker.camera
 import android.opengl.GLSurfaceView
 import android.util.Log
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.Canvas
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,10 +40,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -48,12 +56,9 @@ import at.aau.appdev.colorpicker.MainActivity
 import at.aau.appdev.colorpicker.R
 import at.aau.appdev.colorpicker.generateColor
 import at.aau.appdev.colorpicker.ui.theme.ColorPickerTheme
-import com.google.ar.core.Anchor
 import com.google.ar.core.HitResult
 import kotlinx.coroutines.delay
 import kotlin.random.Random
-
-var anchor: Anchor? = null
 
 @Composable
 fun CameraScreen(navController: NavController) {
@@ -76,11 +81,10 @@ fun CameraScreen(navController: NavController) {
         .fillMaxSize()
         .pointerInput(Unit) {
             detectTapGestures(onTap = { offset ->
-                // TODO: Here, the 'viewModel' should be tasked with adding a new point based on
-                // TODO: the tap offset. The coordinates do not have to be normalized as both
-                // TODO: 'hitTest' and 'hitTestInstantPlacement' support screen-space coordinates.
-                // INFO: Whether ARCore is used or not, a custom interface should be added to allow
-                // INFO: for different data providers.
+                // TODO: The following code should be extracted into the 'viewModel':
+                // INFO: Currently, ARCore is used for camera and position data. This may change in
+                // INFO: the future. A custom interface should be added to allow for different
+                // INFO: implementations.
                 Log.d(
                     "CameraView.CameraScreen", "Tapped at coordinates ${offset.x}, ${offset.y}."
                 )
@@ -92,6 +96,7 @@ fun CameraScreen(navController: NavController) {
                 Log.d("CameraView.CameraScreen", "Hit test succeeded.")
                 // TODO: Every anchor should be stored in the 'viewModel' so it can be properly
                 // TODO: disposed of when it is not needed anymore:
+                // INFO: Currently leads to a crash; tracking state needs to be checked beforehand.
                 // anchor = hitResults.get(0).createAnchor()
             })
         }, update = { view ->
@@ -146,9 +151,8 @@ fun CameraScreenPreview() {
 fun ColorProbeOverlay(
     points: List<Int>,
     modifier: Modifier = Modifier,
-    ringRadiusDp: Dp = 12.dp,
-    ringThicknessDp: Dp = 4.dp
 ) {
+    // TODO: This code is just a placeholder and should render actual points from the 'viewModel'!
     val refreshTrigger = remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
@@ -158,42 +162,104 @@ fun ColorProbeOverlay(
         }
     }
 
-    val density = LocalDensity.current
-    val ringRadiusPx = with(density) { ringRadiusDp.toPx() }
-    val innerRadiusPx = ringRadiusPx - with(density) { ringThicknessDp.toPx() }
-
     val random = Random(refreshTrigger.intValue)
     val display = LocalContext.current.display
-    Canvas(modifier = modifier) {
 
-        ///
-        if (anchor != null) {
-            // FIXME:
-            val offset = Offset(0.0f, 0.0f)
-            val color = generateColor()
-
-            drawCircle(
-                color = Color.White, radius = ringRadiusPx, center = offset
-            )
-            drawCircle(
-                color = color, radius = innerRadiusPx, center = offset
-            )
-        }
-        ///
-
+    Box(modifier = modifier.fillMaxSize()) {
         points.forEach { point ->
-            val offset =
-                Offset(random.nextFloat() * display.width, random.nextFloat() * display.height)
-            val color = generateColor()
+            key(point) {
+                val color = generateColor()
+                val offset = IntOffset(
+                    (random.nextFloat() * display.width).toInt(),
+                    (random.nextFloat() * display.height).toInt()
+                )
 
-            drawCircle(
-                color = Color.White, radius = ringRadiusPx, center = offset
-            )
-            drawCircle(
-                color = color, radius = innerRadiusPx, center = offset
-            )
+                ColorProbe(
+                    color = color,
+                    offset = offset,
+                    onSingleTap = {},
+                    onDoubleTap = {},
+                    onDragStart = {},
+                    onDragEnd = {},
+                    isActive = false
+                )
+
+            }
         }
     }
+}
+
+@Composable
+fun ColorProbe(
+    color: Color,
+    offset: IntOffset,
+    ringRadiusDp: Dp = 12.dp,
+    ringThicknessDp: Dp = 4.dp,
+    onSingleTap: () -> Unit,
+    onDoubleTap: () -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    isActive: Boolean
+) {
+    Box(modifier = Modifier
+        .offset { offset }
+        .size(ringRadiusDp * 2)
+        .border(
+            width = ringThicknessDp, color = Color.White, shape = CircleShape
+        )
+        .background(
+            color = color, shape = CircleShape
+        )
+        .clip(CircleShape)
+        // https://developer.android.com/develop/ui/compose/touch-input/pointer-input/understand-gestures
+        // https://developer.android.com/reference/kotlin/androidx/compose/foundation/gestures/package-summary.html
+        .pointerInput(isActive) {
+            detectTapGestures(onTap = { offset ->
+                Log.d(
+                    "CameraView.ColorProbe", "Tap gesture detected: onTap()"
+                )
+            }, onDoubleTap = { offset ->
+                Log.d(
+                    "CameraView.ColorProbe", "Tap gesture detected: onDoubleTap()"
+                )
+            }, onPress = { offset ->
+                Log.d(
+                    "CameraView.ColorProbe", "Tap gesture detected: onPress()"
+                )
+            })
+        }
+        .pointerInput(isActive) {
+            detectDragGestures(onDragStart = {
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture detected: onDragStart()"
+                )
+            }, onDragEnd = {
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture detected: onDragEnd()"
+                )
+            }, onDrag = { change, offset ->
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture detected: onDrag()"
+                )
+            })
+        }
+        .pointerInput(isActive) {
+            // TODO: This gesture is equivalent to the drag gesture but also activates a magnifying
+            // TODO: glass as well as slower movement for better accuracy.
+            detectDragGesturesAfterLongPress(onDragStart = {
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture after long press detected: onDragStart()"
+                )
+            }, onDragEnd = {
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture after long press detected: onDragEnd()"
+                )
+            }, onDrag = { change, offset ->
+                Log.d(
+                    "CameraView.ColorProbe", "Drag gesture after long press detected: onDrag()"
+                )
+            })
+        })
 }
 
 @Composable
@@ -204,14 +270,14 @@ fun ControlRow(modifier: Modifier, navController: NavController) {
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         PhotoLibraryNavButton(navController = navController)
-        CaptureButton { }
+        CaptureButton()
         ColorGalleryNavButton(navController = navController)
     }
 }
 
 @Composable
 fun CaptureButton(
-    modifier: Modifier = Modifier, innerColor: Color = Color.DarkGray, onClick: () -> Unit
+    modifier: Modifier = Modifier, innerColor: Color = Color.DarkGray
 ) {
     Box(
         modifier = modifier
@@ -257,11 +323,28 @@ fun DropShadowIconButton(resource: Int, contentDescription: String?, onClick: ()
 
 @Composable
 fun PhotoLibraryNavButton(navController: NavController) {
-    DropShadowIconButton(R.drawable.ic_photo_library, "Photo Library", {})
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            // TODO: After the image has been selected, multiple things need to happen:
+            // TODO: - The ARCore session has to be stopped;
+            // TODO: - The image has to be loaded;
+            // TODO: - The OpenGL surface has to be filled with the image;
+            // TODO: - The photo library icon to be changed to 'R.drawable.ic_photo_camera'.
+            Log.d("CameraView.PhotoLibraryNavButton", "URI = $uri")
+        }
+    DropShadowIconButton(R.drawable.ic_photo_library, "Photo Library", {
+        launcher.launch(
+            PickVisualMediaRequest(
+                mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly
+            )
+        )
+    })
 }
 
 @Composable
 fun ColorGalleryNavButton(navController: NavController) {
     DropShadowIconButton(
-        R.drawable.ic_color_palette, "Color Palette", { navController.navigate("gallery") })
+        R.drawable.ic_color_palette, "Color Palette", {
+            navController.navigate("gallery")
+        })
 }
