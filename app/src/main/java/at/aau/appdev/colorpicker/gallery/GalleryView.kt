@@ -2,10 +2,13 @@ package at.aau.appdev.colorpicker.gallery
 
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.shape.CircleShape
@@ -28,17 +32,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
@@ -53,7 +53,6 @@ fun GalleryScreen(navController: NavController) {
     val viewModel: GalleryViewModel = viewModel()
 
     Scaffold { padding ->
-        Log.i("sydaf", "GalleryScreen: $padding")
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
@@ -99,21 +98,6 @@ fun BoxScope.CameraNavButton(navController: NavController) {
     }
 }
 
-/*
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun BoxScope.ActionButton(navController: NavController) {
-    var isExpanded = false
-    FloatingActionButtonMenu(
-        expanded = isExpanded,
-        button = {
-            ToggleFloatingActionButton(
-                checked = isExpanded, onCheckedChange = { isExpanded = !isExpanded }) {}
-        },
-    ) {}
-}
-*/
-
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
@@ -153,38 +137,52 @@ val offsets = arrayOf(
 @OptIn(ExperimentalStdlibApi::class)
 @Composable
 fun ColorSwatch(modifier: Modifier = Modifier, color: Color) {
+    // TODO: 'isActive' should be set elsewhere!
+    val isActive = false
     Box(
         modifier = modifier
             .aspectRatio(1.6f)
             .padding(8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(color)
-        ) {
-            Text(
-                color.toArgb().toHexString(HexFormat.UpperCase).slice(IntRange(2, 7)),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier
-                    .padding(12.dp)
-                    .align(Alignment.TopStart)
-            )
-        }
+            .clip(RoundedCornerShape(16.dp))
+            .background(color)
+            .pointerInput(isActive) {
+                detectDragGesturesAfterLongPress(onDragStart = {
+                    Log.d(
+                        "GalleryView.ColorSwatch",
+                        "Drag gesture after long press detected: onDragStart()"
+                    )
+                }, onDragEnd = {
+                    Log.d(
+                        "GalleryView.ColorSwatch",
+                        "Drag gesture after long press detected: onDragEnd()"
+                    )
+                }, onDrag = { change, offset ->
+                    Log.d(
+                        "GalleryView.ColorSwatch",
+                        "Drag gesture after long press detected: onDrag()"
+                    )
+                })
+            }) {
+        Label(color.toArgb().toHexString(HexFormat.UpperCase).slice(IntRange(2, 7)))
     }
 }
 
 @Composable
 fun ColorFan(modifier: Modifier = Modifier, colors: List<Color>) {
+    // TODO: 'isActive' should be set elsewhere!
+    val isActive = false
     val count = colors.size
     Box(
         modifier = modifier
             .aspectRatio(1.25f)
             .padding(8.dp)
-    ) {
+            .pointerInput(isActive) {
+                detectTapGestures(onLongPress = { offset ->
+                    Log.d(
+                        "GalleryView.ColorFan", "Tap gesture detected: onLongPress()"
+                    )
+                })
+            }) {
         for (i in (count - 1) downTo 0) {
             Box(
                 modifier = Modifier
@@ -206,36 +204,32 @@ fun ColorFan(modifier: Modifier = Modifier, colors: List<Color>) {
                 .background(MaterialTheme.colorScheme.background)
         )
 
-        var textSize: IntSize = IntSize(80, 80);
+        Label("Muddy Greens")
+    }
+}
+
+@Composable
+private fun BoxScope.Label(label: String) {
+    Box(
+        modifier = Modifier.align(Alignment.BottomEnd)
+    ) {
         Text(
-            "Collection",
+            label,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.inverseOnSurface,
             modifier = Modifier
-                .padding(12.dp)
-                .align(Alignment.BottomEnd)
-                .zIndex(1.0f)
-                .onGloballyPositioned { textSize = it.size })
-        Log.i("LOOOOL", "ColorFan: $textSize")
-        Box(modifier = Modifier
-            .matchParentSize()
-            .clip(RoundedCornerShape(8.dp))
-            .graphicsLayer {
-                renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                    20f, 20f, android.graphics.Shader.TileMode.CLAMP
-                ).asComposeRenderEffect()
-            }
-            .background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.8f))
-            .zIndex(0.9f)) {
-            // TODO: Here, a duplicate of the color fan that has been created above
-            // TODO: in the 'for' loop must be redrawn, clipped, an then blurred.
-
-        }
+                .padding(6.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.6f))
+                .padding(6.dp)
+                .width(IntrinsicSize.Min)
+        )
     }
 }
 
-
+// TODO: This class is only needed for previews because there is no 'viewModel' yet;
+// TODO: remove in the future.
 class DiscreteDistribution(private val outcomes: List<Int>, weights: List<Double>) {
     private val cumulative: List<Double>
 
